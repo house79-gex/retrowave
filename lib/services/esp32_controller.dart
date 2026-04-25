@@ -66,6 +66,17 @@ class Esp32Controller {
     }
   }
 
+  /// Esegue `/bluetooth` e ritorna il body testuale (`BT_ON`, `RADIO`, `BT_NOT_SUPPORTED`, ...).
+  Future<String?> toggleBluetoothRaw({Duration timeout = const Duration(seconds: 8)}) async {
+    try {
+      final r = await http.get(_u('/bluetooth')).timeout(timeout);
+      if (r.statusCode != 200) return null;
+      return r.body.trim();
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<bool> rename(String name, {Duration timeout = const Duration(seconds: 6)}) async {
     try {
       final r = await http
@@ -75,6 +86,16 @@ class Esp32Controller {
             body: 'name=${Uri.encodeComponent(name)}',
           )
           .timeout(timeout);
+      return r.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Cancella WiFi sull'ESP e riavvia: torna l'AP RetroWave-…-Setup (solo se raggiungibile in LAN).
+  Future<bool> wifiReset({Duration timeout = const Duration(seconds: 6)}) async {
+    try {
+      final r = await http.get(_u('/wifi_reset')).timeout(timeout);
       return r.statusCode == 200;
     } catch (_) {
       return false;

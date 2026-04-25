@@ -9,11 +9,15 @@ class DeviceCard extends StatelessWidget {
     required this.device,
     required this.onTap,
     required this.onLongPress,
+    this.onRemove,
   });
 
   final EspDevice device;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
+
+  /// Rimuove dalla lista app (non dall'ESP).
+  final VoidCallback? onRemove;
 
   String _macShort(String mac) {
     final p = mac.split(':');
@@ -141,13 +145,41 @@ class DeviceCard extends StatelessWidget {
                           label,
                           style: AppTheme.mono(10, weight: FontWeight.w500).copyWith(
                             color: mode == 'bluetooth'
-                                ? const Color(0xFFA89CF5)
+                                ? AppColors.purple
                                 : mode == 'radio'
                                     ? AppColors.acc
                                     : AppColors.muted,
                           ),
                         ),
                       ),
+                      if (onRemove != null) ...[
+                        const SizedBox(width: 4),
+                        Material(
+                          color: Colors.transparent,
+                          child: PopupMenuButton<String>(
+                            icon: Icon(Icons.more_vert_rounded, color: AppColors.muted, size: 22),
+                            color: AppColors.s2,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            onSelected: (v) {
+                              if (v == 'remove') onRemove!();
+                            },
+                            itemBuilder: (ctx) => [
+                              const PopupMenuItem(
+                                value: 'remove',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.delete_outline_rounded, color: AppColors.red, size: 22),
+                                    SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text('Rimuovi dall\'app'),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -167,7 +199,9 @@ class DeviceCard extends StatelessWidget {
                                 style: TextStyle(color: AppColors.muted2, fontSize: 12),
                               ),
                               TextSpan(
-                                text: device.stationLabel ?? device.currentUrl ?? '—',
+                                text: device.streamTitle?.trim().isNotEmpty == true
+                                    ? device.streamTitle
+                                    : (device.stationLabel ?? device.streamStation ?? device.currentUrl ?? '—'),
                                 style: const TextStyle(
                                   color: AppColors.text,
                                   fontWeight: FontWeight.w600,

@@ -9,6 +9,10 @@ class RadioStation {
     this.tags,
     this.bitrate,
     this.codec,
+    this.homepage,
+    this.language,
+    this.votes,
+    this.clickCount,
   });
 
   final String stationUuid;
@@ -19,6 +23,10 @@ class RadioStation {
   final String? tags;
   final int? bitrate;
   final String? codec;
+  final String? homepage;
+  final String? language;
+  final int? votes;
+  final int? clickCount;
 
   factory RadioStation.fromJson(Map<String, dynamic> j) {
     return RadioStation(
@@ -30,6 +38,10 @@ class RadioStation {
       tags: j['tags']?.toString(),
       bitrate: _intOrNull(j['bitrate']),
       codec: j['codec']?.toString(),
+      homepage: j['homepage']?.toString(),
+      language: j['language']?.toString(),
+      votes: _intOrNull(j['votes']),
+      clickCount: _intOrNull(j['clickcount']),
     );
   }
 

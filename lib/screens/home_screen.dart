@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 
 import '../models/esp_device.dart';
@@ -25,7 +26,8 @@ class HomeScreen extends StatelessWidget {
             }
           }
         }
-        final station = primary != null ? (primary.stationLabel ?? primary.currentUrl ?? '—') : '—';
+        final station = primary != null ? (primary.stationLabel ?? primary.streamStation ?? primary.currentUrl ?? '—') : '—';
+        final title = primary != null ? (primary.streamTitle ?? primary.streamIcyDescription ?? '—') : '—';
         final vol = primary != null ? primary.volume : 10;
         final active = primary != null && primary.playing;
         final primaryMac = primary?.mac;
@@ -74,28 +76,56 @@ class HomeScreen extends StatelessWidget {
                       Row(
                         children: [
                           Container(
-                            width: 6,
-                            height: 6,
-                            decoration: const BoxDecoration(color: AppColors.red, shape: BoxShape.circle),
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: active ? AppColors.green : AppColors.muted,
+                              shape: BoxShape.circle,
+                              boxShadow: active
+                                  ? [BoxShadow(blurRadius: 8, spreadRadius: 1, color: AppColors.green.withValues(alpha: 0.5))]
+                                  : null,
+                            ),
                           ),
-                          const SizedBox(width: 6),
-                          Text('IN RIPRODUZIONE', style: AppTheme.mono(9, color: AppColors.acc).copyWith(letterSpacing: 1.4)),
+                          const SizedBox(width: 8),
+                          Text(
+                            active ? 'IN ASCOLTO' : 'PRONTO',
+                            style: AppTheme.mono(9, color: active ? AppColors.green : AppColors.muted).copyWith(letterSpacing: 1.4),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 14),
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Container(
-                            width: 62,
-                            height: 62,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(18),
-                              gradient: const LinearGradient(colors: [AppColors.acc, AppColors.acc2]),
-                              boxShadow: const [BoxShadow(blurRadius: 24, color: Color(0x40F5C518))],
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(18),
+                            child: SizedBox(
+                              width: 62,
+                              height: 62,
+                              child: primary?.stationLogoUrl != null && primary!.stationLogoUrl!.startsWith('http')
+                                  ? CachedNetworkImage(
+                                      imageUrl: primary.stationLogoUrl!,
+                                      fit: BoxFit.cover,
+                                      errorWidget: (context, url, error) => Container(
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(18),
+                                          gradient: const LinearGradient(colors: [AppColors.acc, AppColors.acc2]),
+                                          boxShadow: const [BoxShadow(blurRadius: 24, color: Color(0x40F5C518))],
+                                        ),
+                                        alignment: Alignment.center,
+                                        child: const Text('📻', style: TextStyle(fontSize: 26)),
+                                      ),
+                                    )
+                                  : Container(
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(18),
+                                        gradient: const LinearGradient(colors: [AppColors.acc, AppColors.acc2]),
+                                        boxShadow: const [BoxShadow(blurRadius: 24, color: Color(0x40F5C518))],
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: const Text('📻', style: TextStyle(fontSize: 26)),
+                                    ),
                             ),
-                            alignment: Alignment.center,
-                            child: const Text('📻', style: TextStyle(fontSize: 26)),
                           ),
                           const SizedBox(width: 14),
                           Expanded(
@@ -111,7 +141,7 @@ class HomeScreen extends StatelessWidget {
                                 const SizedBox(height: 4),
                                 Text('Streaming · LAN', style: AppTheme.mono(12)),
                                 const SizedBox(height: 4),
-                                Text('—', style: AppTheme.mono(10, color: AppColors.acc)),
+                                Text(title, style: AppTheme.mono(10, color: AppColors.acc), maxLines: 1, overflow: TextOverflow.ellipsis),
                               ],
                             ),
                           ),

@@ -23,7 +23,7 @@ class MdnsEndpoint {
 
 /// Scansiona `_retrowave._tcp.local` e risolve host/port (e A dove possibile).
 Future<List<MdnsEndpoint>> discoverRetrowaveEndpoints({
-  Duration ptrTimeout = const Duration(seconds: 4),
+  Duration ptrTimeout = const Duration(seconds: 6),
 }) async {
   final MDnsClient client = MDnsClient();
   await client.start();

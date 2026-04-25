@@ -1,158 +1,458 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../helpers/android_wifi_intent.dart';
+import '../services/device_manager.dart';
 import '../theme/app_theme.dart';
 
-class SetupScreen extends StatelessWidget {
+/// Setup guidato: rete, scansione automatica, IP manuale, ripristino nascosti.
+class SetupScreen extends StatefulWidget {
   const SetupScreen({super.key});
 
   @override
+  State<SetupScreen> createState() => _SetupScreenState();
+}
+
+class _SetupScreenState extends State<SetupScreen> with WidgetsBindingObserver {
+  static final Uri _captiveUri = Uri.parse('http://192.168.4.1');
+  final _ipCtrl = TextEditingController();
+  StreamSubscription<List<ConnectivityResult>>? _connSub;
+  List<ConnectivityResult> _lastConn = [];
+  Timer? _autoScan;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    unawaited(_readConnectivity());
+    _connSub = Connectivity().onConnectivityChanged.listen((r) {
+      if (mounted) setState(() => _lastConn = r);
+    });
+    _autoScan = Timer.periodic(const Duration(seconds: 8), (_) {
+      if (!mounted) return;
+      final dm = context.read<DeviceManager>();
+      if (!dm.discoveryBusy) unawaited(dm.refreshDiscovery());
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.read<DeviceManager>().refreshDiscovery();
+    });
+  }
+
+  Future<void> _readConnectivity() async {
+    try {
+      final r = await Connectivity().checkConnectivity();
+      if (mounted) setState(() => _lastConn = r);
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _connSub?.cancel();
+    _autoScan?.cancel();
+    _ipCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_readConnectivity());
+      context.read<DeviceManager>().refreshDiscovery();
+    }
+  }
+
+  bool get _hasLan {
+    return _lastConn.any(
+      (e) => e == ConnectivityResult.wifi || e == ConnectivityResult.ethernet || e == ConnectivityResult.vpn,
+    );
+  }
+
+  Future<void> _openCaptivePortal(BuildContext context) async {
+    final ok = await launchUrl(_captiveUri, mode: LaunchMode.externalApplication);
+    if (!context.mounted) return;
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Apri manualmente: http://192.168.4.1')),
+      );
+    }
+  }
+
+  Future<void> _confirmWifiReset(BuildContext context, DeviceManager dm, String mac, String label) async {
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Riconfigurare il WiFi?'),
+        content: Text(
+          '«$label» cancellerà il WiFi e si riavvierà. Poi connettiti a RetroWave-…-Setup e apri il portale.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Conferma')),
+        ],
+      ),
+    );
+    if (go != true || !context.mounted) return;
+    final ok = await dm.requestWifiReset(mac);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok ? 'Richiesta inviata. Cerca RetroWave-…-Setup tra pochi secondi.' : 'Nessuna risposta: stessa WiFi?',
+        ),
+      ),
+    );
+    if (ok) unawaited(dm.refreshDiscovery());
+  }
+
+  Future<void> _addByIp(BuildContext context, DeviceManager dm) async {
+    final host = _ipCtrl.text.trim();
+    if (host.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Inserisci un indirizzo IP (es. 192.168.99.25)')),
+      );
+      return;
+    }
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await dm.addManualHost(host);
+    if (!context.mounted) return;
+    messenger.showSnackBar(
+      SnackBar(content: Text(ok ? 'Dispositivo aggiunto' : 'Non raggiungibile: verifica IP e rete')),
+    );
+    if (ok) _ipCtrl.clear();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-        children: [
-          const SizedBox(height: 8),
-          const Text(
-            'Aggiungi\ndispositivo',
-            style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, height: 1.05),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Segui i passaggi per configurare un nuovo ESP32',
-            style: AppTheme.mono(13, color: AppColors.muted2),
-          ),
-          const SizedBox(height: 16),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: const LinearProgressIndicator(value: 0.45, minHeight: 4, color: AppColors.acc, backgroundColor: AppColors.s2),
-          ),
-          const SizedBox(height: 20),
-          _step(
-            done: true,
-            active: false,
-            numLabel: '✓',
-            title: 'Alimenta l\'ESP32',
-            desc: 'Collega l\'alimentatore. Il LED lampeggia: sta creando l\'hotspot di configurazione.',
-          ),
-          _step(
-            done: false,
-            active: true,
-            numLabel: '2',
-            title: 'Connettiti all\'hotspot',
-            desc: 'Vai in Impostazioni → WiFi sul telefono e connettiti a:',
-            extra: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.s2,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.border2),
+    return Consumer<DeviceManager>(
+      builder: (context, dm, _) {
+        final online = dm.devices.where((d) => d.isOnline && !d.mac.startsWith('pending:')).toList();
+        final pending = dm.devices.where((d) => d.mac.startsWith('pending:')).length;
+
+        return SafeArea(
+          child: CustomScrollView(
+            slivers: [
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+                sliver: SliverToBoxAdapter(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Setup', style: AppTheme.displayTitle(size: 32)),
+                      Text(
+                        'Stessa WiFi del telefono e degli ESP. L’app cerca da sola ogni pochi secondi.',
+                        style: TextStyle(color: AppColors.muted2, fontSize: 14, height: 1.45),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              child: Row(
-                children: [
-                  const Text('📶', style: TextStyle(fontSize: 22)),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('RetroWave-XXXX-Setup', style: AppTheme.mono(13, color: AppColors.acc, weight: FontWeight.w500)),
-                        Text('Nessuna password richiesta', style: AppTheme.mono(11, color: AppColors.muted)),
-                      ],
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                sliver: SliverToBoxAdapter(
+                  child: _networkBanner(),
+                ),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                sliver: SliverToBoxAdapter(
+                  child: _scanCard(context, dm, online.length, pending),
+                ),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                sliver: SliverToBoxAdapter(
+                  child: _manualIpCard(context, dm),
+                ),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+                sliver: SliverToBoxAdapter(
+                  child: Text('Azioni rapide', style: AppTheme.mono(11, color: AppColors.muted).copyWith(letterSpacing: 1)),
+                ),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                sliver: SliverToBoxAdapter(
+                  child: Column(
+                    children: [
+                      _tile(Icons.wifi_rounded, 'Impostazioni WiFi', 'Apri il pannello sistema', () => openAndroidWifiSettings()),
+                      const SizedBox(height: 10),
+                      _tile(Icons.language_rounded, 'Portale captive', 'http://192.168.4.1 (da hotspot ESP)', () => _openCaptivePortal(context)),
+                    ],
+                  ),
+                ),
+              ),
+              if (dm.hiddenDeviceCount > 0)
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+                  sliver: SliverToBoxAdapter(
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        await dm.restoreHiddenDevices();
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Dispositivi nascosti ripristinati')),
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.restore_rounded),
+                      label: Text('Ripristina ${dm.hiddenDeviceCount} nascost${dm.hiddenDeviceCount == 1 ? 'o' : 'i'}'),
                     ),
                   ),
-                ],
+                ),
+              if (online.isNotEmpty) ...[
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
+                  sliver: SliverToBoxAdapter(
+                    child: Text('Riconfigura WiFi (da casa)', style: AppTheme.mono(11, color: AppColors.muted)),
+                  ),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (ctx, i) {
+                        final d = online[i];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Material(
+                            color: AppColors.s1,
+                            borderRadius: BorderRadius.circular(18),
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                              title: Text(d.displayName, style: const TextStyle(fontWeight: FontWeight.w700)),
+                              subtitle: Text(d.baseUrl, style: AppTheme.mono(11, color: AppColors.muted)),
+                              trailing: FilledButton.tonal(
+                                onPressed: () => _confirmWifiReset(context, dm, d.mac, d.displayName),
+                                child: const Text('WiFi'),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                      childCount: online.length,
+                    ),
+                  ),
+                ),
+              ],
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+                sliver: SliverToBoxAdapter(
+                  child: _tips(),
+                ),
               ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _networkBanner() {
+    final ok = _hasLan;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        gradient: LinearGradient(
+          colors: ok
+              ? [const Color(0xFF0F1A14), const Color(0xFF121C18)]
+              : [const Color(0xFF1A1410), const Color(0xFF221A12)],
+        ),
+        border: Border.all(color: ok ? AppColors.green.withValues(alpha: 0.35) : AppColors.acc2.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: [
+          Icon(ok ? Icons.wifi_rounded : Icons.wifi_off_rounded, color: ok ? AppColors.green : AppColors.acc2, size: 28),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  ok ? 'Rete disponibile' : 'Controlla la connessione',
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  ok
+                      ? 'Il telefono sembra su Wi‑Fi o Ethernet. Gli ESP sulla stessa rete possono essere trovati.'
+                      : 'Attiva il Wi‑Fi e collegati alla rete di casa (o all’hotspot RetroWave per la prima configurazione).',
+                  style: TextStyle(color: AppColors.muted2, fontSize: 12, height: 1.4),
+                ),
+              ],
             ),
-          ),
-          _step(
-            done: false,
-            active: false,
-            numLabel: '3',
-            title: 'Inserisci il WiFi di casa',
-            desc: 'Si aprirà un portale captive. Seleziona la tua rete WiFi e inserisci la password. L\'ESP32 la salva in memoria permanente.',
-          ),
-          _step(
-            done: false,
-            active: false,
-            numLabel: '4',
-            title: 'Dai un nome al dispositivo',
-            desc: 'L\'app lo trova automaticamente sulla rete. Potrai rinominarlo (es. "Cucina") con un tap lungo sulla card.',
-          ),
-          const SizedBox(height: 12),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.acc,
-              foregroundColor: AppColors.bg,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-            ),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Quando l\'ESP32 è online, apparirà in Dispositivi (mDNS).')),
-              );
-            },
-            child: const Text('Ho capito', style: TextStyle(fontWeight: FontWeight.w800)),
           ),
         ],
       ),
     );
   }
 
-  Widget _step({
-    required bool done,
-    required bool active,
-    required String numLabel,
-    required String title,
-    required String desc,
-    Widget? extra,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: AppColors.s1,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(
-            color: active
-                ? const Color(0x66F5C518)
-                : done
-                    ? const Color(0x4D22D3A0)
-                    : AppColors.border,
-            width: 1.5,
+  Widget _scanCard(BuildContext context, DeviceManager dm, int onlineN, int pendingN) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        color: AppColors.s1,
+        border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+            color: AppColors.acc.withValues(alpha: 0.06),
           ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 28,
-              height: 28,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(10),
-                color: active
-                    ? AppColors.acc
-                    : done
-                        ? AppColors.green
-                        : AppColors.s2,
-                border: Border.all(color: active || done ? Colors.transparent : AppColors.border2),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              SizedBox(
+                width: 22,
+                height: 22,
+                child: dm.discoveryBusy
+                    ? const CircularProgressIndicator(strokeWidth: 2, color: AppColors.acc)
+                    : Icon(Icons.radar_rounded, color: AppColors.acc, size: 22),
               ),
-              child: Text(
-                numLabel,
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: active || done ? AppColors.bg : AppColors.muted,
-                  fontSize: 13,
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Ricerca automatica',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
                 ),
               ),
+              TextButton.icon(
+                onPressed: dm.discoveryBusy ? null : () => dm.refreshDiscovery(),
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('Ora'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            '$onlineN online · $pendingN in attesa di risposta',
+            style: AppTheme.mono(13, color: AppColors.muted2),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Non vedi il dispositivo? Vai su Dispositivi e usa «IP» oppure inseriscilo qui sotto.',
+            style: TextStyle(color: AppColors.muted2, fontSize: 12, height: 1.4),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _manualIpCard(BuildContext context, DeviceManager dm) {
+    return Container(
+      margin: const EdgeInsets.only(top: 16),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        color: AppColors.s2,
+        border: Border.all(color: AppColors.border2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.pin_drop_rounded, color: AppColors.cyan, size: 22),
+              const SizedBox(width: 10),
+              const Text('Aggiungi con IP', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Utile se mDNS non funziona (rete Android). L’IP è su Serial o sul router.',
+            style: TextStyle(color: AppColors.muted2, fontSize: 12),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _ipCtrl,
+            keyboardType: TextInputType.url,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+            decoration: InputDecoration(
+              hintText: 'es. 192.168.99.25',
+              filled: true,
+              fillColor: AppColors.s1,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
             ),
-            const SizedBox(height: 12),
-            Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 6),
-            Text(desc, style: TextStyle(color: AppColors.muted2, height: 1.55, fontSize: 13)),
-            ?extra,
-          ],
+            onSubmitted: (_) => _addByIp(context, dm),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: () => _addByIp(context, dm),
+              child: const Text('Collega dispositivo'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _tile(IconData icon, String title, String sub, VoidCallback onTap) {
+    return Material(
+      color: AppColors.s1,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: AppColors.acc, size: 24),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+                    Text(sub, style: TextStyle(fontSize: 12, color: AppColors.muted2)),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, color: AppColors.muted),
+            ],
+          ),
         ),
+      ),
+    );
+  }
+
+  Widget _tips() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        color: AppColors.s1.withValues(alpha: 0.8),
+        border: Border.all(color: AppColors.border2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Suggerimenti', style: AppTheme.mono(11, color: AppColors.muted)),
+          const SizedBox(height: 8),
+          Text(
+            '• Dopo il primo setup l’hotspot RetroWave sparisce: è normale.\n'
+            '• Portale: http://192.168.4.1 da browser se non si apre da solo.\n'
+            '• BOOT premuto al reset = cancella WiFi salvato sull’ESP.',
+            style: TextStyle(color: AppColors.muted2, height: 1.5, fontSize: 12),
+          ),
+        ],
       ),
     );
   }

@@ -1,6 +1,22 @@
 # RetroWave — Schema di collegamento hardware
 
-Documento di riferimento per **ESP32-S3** + modulo **GY-PCM5102 (PCM5102A)** + **radio con ingresso AUX**.
+Documento di riferimento per **ESP32-S3** e **ESP32-WROOM-32U** (DevKit + antenna U.FL) + modulo **GY-PCM5102 (PCM5102A)** + **radio con ingresso AUX**.
+
+### Board **ESP32-WROOM-32U** (firmware PlatformIO `esp32-wroom-32u`)
+
+- **Bluetooth**: BR/EDR + BLE — adatto al **sink A2DP** (telefono come sorgente audio).
+- **Antenna**: collegare l’antenna **2,4 GHz** al connettore **U.FL** prima di alimentare (WiFi e BT usano la stessa radio).
+- **I2S nel firmware** (default progetto verso PCM5102):
+
+| Segnale I2S | GPIO (default `platformio.ini`) | Pin sul PCM5102 |
+|-------------|-----------------------------------|-----------------|
+| **BCLK**    | **GPIO 16**                       | **BCK**         |
+| **LRCK/WS** | **GPIO 5**                        | **LCK**         |
+| **DOUT**    | **GPIO 17**                       | **DIN**         |
+
+Verifica sempre i valori effettivi in **`GET /diag`** → `i2s_expected` dopo ogni build. Se cambi GPIO, aggiorna `build_flags` (`-DI2S_BCLK=…` ecc.) in `firmware/platformio.ini`.
+
+---
 
 ### Board **YD-ESP32-S3** (es. etichetta `YD-ESP32-23`, modulo `S3-N16R8`)
 
@@ -62,7 +78,7 @@ flowchart LR
   end
 
   subgraph LAN["Rete WiFi domestica"]
-    ESP[ESP32-S3]
+    ESP[ESP32 S3 o WROOM]
   end
 
   subgraph Audio["Catena audio"]
@@ -72,7 +88,7 @@ flowchart LR
   end
 
   APP <-->|HTTP / mDNS| ESP
-  BT -->|A2DP opzionale| ESP
+  BT -->|A2DP solo ESP32 Classic| ESP
   ESP -->|I2S digitale| DAC
   DAC -->|analogico L/R + GND| JACK --> RADIO
 

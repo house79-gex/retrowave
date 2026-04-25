@@ -16,7 +16,7 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   int _index = 0;
 
-  static const _labels = ['Dispositivi', 'Home', 'Cerca', 'Spotify', 'Setup'];
+  static const _labels = ['Dispositivi', 'Home', 'Radio', 'Bluetooth', 'Setup'];
 
   @override
   Widget build(BuildContext context) {
@@ -32,17 +32,18 @@ class _AppShellState extends State<AppShell> {
         ],
       ),
       bottomNavigationBar: NavigationBar(
-        height: 76,
-        backgroundColor: const Color(0xF2111318),
-        indicatorColor: AppColors.acc.withValues(alpha: 0.15),
+        height: 72,
+        backgroundColor: const Color(0xF012151C),
+        indicatorColor: AppColors.accSoft,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
         destinations: [
-          _nav(Icons.sensors, _labels[0]),
-          _nav(Icons.home_outlined, _labels[1]),
-          _nav(Icons.search, _labels[2]),
-          _nav(Icons.music_note, _labels[3]),
-          _nav(Icons.add_circle_outline, _labels[4]),
+          _nav(Icons.devices_rounded, _labels[0]),
+          _nav(Icons.home_rounded, _labels[1]),
+          _nav(Icons.radio_rounded, _labels[2]),
+          _nav(Icons.bluetooth_rounded, _labels[3]),
+          _nav(Icons.tune_rounded, _labels[4]),
         ],
       ),
     );

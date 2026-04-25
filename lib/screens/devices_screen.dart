@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/esp_device.dart';
 import '../services/device_manager.dart';
 import '../theme/app_theme.dart';
 import '../widgets/device_card.dart';
@@ -72,6 +73,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
                         onLongPress: d.mac.startsWith('pending:')
                             ? () {}
                             : () => _rename(context, dm, d.mac, d.displayName),
+                        onRemove: () => _confirmRemove(context, dm, d),
                       ),
                     ),
                     if (sel >= 2) _multiBar(dm),
@@ -329,6 +331,35 @@ class _DevicesScreenState extends State<DevicesScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _confirmRemove(BuildContext context, DeviceManager dm, EspDevice d) async {
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Rimuovere questo dispositivo?'),
+        content: Text(
+          '«${d.displayName}» sparisce dall’elenco e non tornerà da solo dopo la ricerca di rete. '
+          'Puoi ripristinare tutti i nascosti dalla scheda Setup.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Rimuovi'),
+          ),
+        ],
+      ),
+    );
+    if (go == true && context.mounted) {
+      await dm.removeDevice(d.mac);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Dispositivo rimosso dall’app')),
+        );
+      }
+    }
   }
 
   Future<void> _rename(BuildContext context, DeviceManager dm, String mac, String name) async {
