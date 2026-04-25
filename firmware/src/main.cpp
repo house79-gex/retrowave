@@ -66,7 +66,8 @@ void saveState() {
 
 void loadState() {
   bool fixedInvalidBtMode = false;
-  prefs.begin("radio", true);
+  // Usa read-write anche al primo boot: evita errori NOT_FOUND se namespace ancora assente.
+  prefs.begin("radio", false);
   lastUrl = prefs.getString("url", kDefaultStreamUrl);
   volumeLevel = prefs.getInt("vol", 12);
   {
@@ -84,7 +85,7 @@ void loadState() {
     prefs.putString("mode", mode);
     prefs.end();
   }
-  prefs.begin("device", true);
+  prefs.begin("device", false);
   deviceName = prefs.getString("name", String("RetroWave-") + macSuffix());
   prefs.end();
 

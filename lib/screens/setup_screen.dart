@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -23,6 +25,8 @@ class _SetupScreenState extends State<SetupScreen> with WidgetsBindingObserver {
   StreamSubscription<List<ConnectivityResult>>? _connSub;
   List<ConnectivityResult> _lastConn = [];
   Timer? _autoScan;
+  bool _portalBusy = false;
+  String? _portalDetected;
 
   @override
   void initState() {
@@ -79,6 +83,81 @@ class _SetupScreenState extends State<SetupScreen> with WidgetsBindingObserver {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Apri manualmente: http://192.168.4.1')),
       );
+    }
+  }
+
+  static bool _isPrivateIPv4(String ip) {
+    return ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('172.16.') || ip.startsWith('172.17.') || ip.startsWith('172.18.') || ip.startsWith('172.19.') || ip.startsWith('172.20.') || ip.startsWith('172.21.') || ip.startsWith('172.22.') || ip.startsWith('172.23.') || ip.startsWith('172.24.') || ip.startsWith('172.25.') || ip.startsWith('172.26.') || ip.startsWith('172.27.') || ip.startsWith('172.28.') || ip.startsWith('172.29.') || ip.startsWith('172.30.') || ip.startsWith('172.31.');
+  }
+
+  Future<List<String>> _candidatePortalHosts() async {
+    final set = <String>{'192.168.4.1'};
+    try {
+      final ifs = await NetworkInterface.list(
+        includeLoopback: false,
+        type: InternetAddressType.IPv4,
+      );
+      for (final ni in ifs) {
+        for (final a in ni.addresses) {
+          final ip = a.address;
+          if (!_isPrivateIPv4(ip)) continue;
+          final parts = ip.split('.');
+          if (parts.length != 4) continue;
+          final gw = '${parts[0]}.${parts[1]}.${parts[2]}.1';
+          set.add(gw);
+        }
+      }
+    } catch (_) {}
+    // Fallback comuni su alcune reti.
+    set.addAll(const ['192.168.0.1', '192.168.1.1', '10.0.0.1']);
+    return set.toList();
+  }
+
+  Future<String?> _probePortalHost(String host) async {
+    final uri = Uri.parse('http://$host/');
+    try {
+      final r = await http.get(uri).timeout(const Duration(seconds: 2));
+      if (r.statusCode >= 200 && r.statusCode < 500) {
+        final body = r.body.toLowerCase();
+        if (body.contains('wifimanager') ||
+            body.contains('retro') ||
+            body.contains('configure wifi') ||
+            body.contains('wifi') ||
+            body.contains('captive')) {
+          return host;
+        }
+        // Anche senza marker testuale, una risposta HTTP valida è un buon segnale.
+        return host;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<void> _autoOpenPortal(BuildContext context) async {
+    if (_portalBusy) return;
+    setState(() => _portalBusy = true);
+    try {
+      final hosts = await _candidatePortalHosts();
+      String? found;
+      for (final h in hosts) {
+        found = await _probePortalHost(h);
+        if (found != null) break;
+      }
+      final target = found ?? _captiveUri.host;
+      _portalDetected = target;
+      final ok = await launchUrl(Uri.parse('http://$target'), mode: LaunchMode.externalApplication);
+      if (!context.mounted) return;
+      if (!ok) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Apri manualmente: http://$target')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Portale aperto su http://$target')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _portalBusy = false);
     }
   }
 
@@ -182,7 +261,16 @@ class _SetupScreenState extends State<SetupScreen> with WidgetsBindingObserver {
                     children: [
                       _tile(Icons.wifi_rounded, 'Impostazioni WiFi', 'Apri il pannello sistema', () => openAndroidWifiSettings()),
                       const SizedBox(height: 10),
-                      _tile(Icons.language_rounded, 'Portale captive', 'http://192.168.4.1 (da hotspot ESP)', () => _openCaptivePortal(context)),
+                      _tile(
+                        Icons.auto_awesome_rounded,
+                        _portalBusy ? 'Rilevo portale...' : 'Portale captive automatico',
+                        _portalDetected != null
+                            ? 'Ultimo rilevato: http://$_portalDetected'
+                            : 'Rileva gateway ESP e apre il portale',
+                        () => _autoOpenPortal(context),
+                      ),
+                      const SizedBox(height: 10),
+                      _tile(Icons.language_rounded, 'Apri portale manuale', 'http://192.168.4.1 (hotspot ESP)', () => _openCaptivePortal(context)),
                     ],
                   ),
                 ),
@@ -448,7 +536,8 @@ class _SetupScreenState extends State<SetupScreen> with WidgetsBindingObserver {
           const SizedBox(height: 8),
           Text(
             '• Dopo il primo setup l’hotspot RetroWave sparisce: è normale.\n'
-            '• Portale: http://192.168.4.1 da browser se non si apre da solo.\n'
+            '• Se il captive non si apre, usa «Portale captive automatico» (rileva gateway) oppure http://192.168.4.1.\n'
+            '• L’IP visto sul telefono è spesso diverso: è del telefono, non dell’ESP AP/gateway.\n'
             '• BOOT premuto al reset = cancella WiFi salvato sull’ESP.',
             style: TextStyle(color: AppColors.muted2, height: 1.5, fontSize: 12),
           ),
