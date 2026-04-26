@@ -4,6 +4,7 @@ class RadioStation {
     required this.stationUuid,
     required this.name,
     required this.url,
+    this.urlResolved,
     this.favicon,
     this.country,
     this.tags,
@@ -18,6 +19,7 @@ class RadioStation {
   final String stationUuid;
   final String name;
   final String url;
+  final String? urlResolved;
   final String? favicon;
   final String? country;
   final String? tags;
@@ -28,11 +30,19 @@ class RadioStation {
   final int? votes;
   final int? clickCount;
 
+  /// URL migliore da usare verso il device (preferisce quello risolto da radio-browser).
+  String get playableUrl {
+    final resolved = (urlResolved ?? '').trim();
+    if (resolved.isNotEmpty) return resolved;
+    return url.trim();
+  }
+
   factory RadioStation.fromJson(Map<String, dynamic> j) {
     return RadioStation(
       stationUuid: (j['stationuuid'] ?? j['stationUuid'] ?? '').toString(),
       name: (j['name'] ?? 'Sconosciuta').toString(),
       url: (j['url'] ?? '').toString(),
+      urlResolved: (j['url_resolved'] ?? j['urlResolved'])?.toString(),
       favicon: j['favicon']?.toString(),
       country: j['country']?.toString(),
       tags: j['tags']?.toString(),

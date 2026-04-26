@@ -14,8 +14,14 @@ import 'mdns_discovery.dart';
 class DeviceManager extends ChangeNotifier {
   DeviceManager() {
     _loadPrefs();
-    _discoveryTimer = Timer.periodic(const Duration(seconds: 12), (_) => refreshDiscovery());
-    _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) => pollStatuses());
+    _discoveryTimer = Timer.periodic(
+      const Duration(seconds: 12),
+      (_) => refreshDiscovery(),
+    );
+    _pollTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => pollStatuses(),
+    );
     unawaited(refreshDiscovery());
   }
 
@@ -55,7 +61,9 @@ class DeviceManager extends ChangeNotifier {
     if (targetMacs.isEmpty) {
       return _devices.where((d) => d.isOnline).toList();
     }
-    return _devices.where((d) => targetMacs.contains(d.mac) && d.isOnline).toList();
+    return _devices
+        .where((d) => targetMacs.contains(d.mac) && d.isOnline)
+        .toList();
   }
 
   Future<void> _loadPrefs() async {
@@ -64,14 +72,24 @@ class DeviceManager extends ChangeNotifier {
     if (g != null) {
       try {
         final list = jsonDecode(g) as List<dynamic>;
-        groups = list.map((e) => DeviceGroup.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+        groups = list
+            .map(
+              (e) => DeviceGroup.fromJson(Map<String, dynamic>.from(e as Map)),
+            )
+            .toList();
       } catch (_) {}
     }
     final r = p.getString('retrowave_recent');
     if (r != null) {
       try {
         final list = jsonDecode(r) as List<dynamic>;
-        recentStations = list.map((e) => Map<String, String>.from((e as Map).map((k, v) => MapEntry(k.toString(), v.toString())))).toList();
+        recentStations = list
+            .map(
+              (e) => Map<String, String>.from(
+                (e as Map).map((k, v) => MapEntry(k.toString(), v.toString())),
+              ),
+            )
+            .toList();
       } catch (_) {}
     }
     final ignM = p.getString('retrowave_ignored_macs');
@@ -97,13 +115,22 @@ class DeviceManager extends ChangeNotifier {
 
   Future<void> _saveIgnored() async {
     final p = await SharedPreferences.getInstance();
-    await p.setString('retrowave_ignored_macs', jsonEncode(_ignoredMacs.toList()));
-    await p.setString('retrowave_ignored_endpoints', jsonEncode(_ignoredEndpoints.toList()));
+    await p.setString(
+      'retrowave_ignored_macs',
+      jsonEncode(_ignoredMacs.toList()),
+    );
+    await p.setString(
+      'retrowave_ignored_endpoints',
+      jsonEncode(_ignoredEndpoints.toList()),
+    );
   }
 
   Future<void> _saveGroups() async {
     final p = await SharedPreferences.getInstance();
-    await p.setString('retrowave_groups', jsonEncode(groups.map((e) => e.toJson()).toList()));
+    await p.setString(
+      'retrowave_groups',
+      jsonEncode(groups.map((e) => e.toJson()).toList()),
+    );
   }
 
   Future<void> _saveRecent() async {
@@ -188,7 +215,9 @@ class DeviceManager extends ChangeNotifier {
       playing: playing,
       stationLabel: _bestStationLabel(status: status, fallbackUrl: url),
       chip: status['chip']?.toString(),
-      a2dpSinkCapable: status['a2dp_sink_capable'] is bool ? status['a2dp_sink_capable'] as bool : null,
+      a2dpSinkCapable: status['a2dp_sink_capable'] is bool
+          ? status['a2dp_sink_capable'] as bool
+          : null,
       a2dpSinkStarted: status['a2dp_sink_started'] == true,
       a2dpConnected: status['a2dp_connected'] == true,
       a2dpPairingName: status['a2dp_pairing_name']?.toString(),
@@ -217,7 +246,9 @@ class DeviceManager extends ChangeNotifier {
     for (final d in List<EspDevice>.from(_devices)) {
       if (!d.mac.startsWith('pending:')) continue;
       if (d.port != port) continue;
-      final st = await Esp32Controller(d.baseUrl).getStatus(timeout: const Duration(seconds: 2));
+      final st = await Esp32Controller(
+        d.baseUrl,
+      ).getStatus(timeout: const Duration(seconds: 2));
       final m = (st?['mac'] ?? '').toString();
       if (m.isNotEmpty && normMac(m) == want) {
         toDrop.add(d.mac);
@@ -234,7 +265,9 @@ class DeviceManager extends ChangeNotifier {
     _devices.removeWhere((d) {
       if (!d.mac.startsWith('pending:')) return false;
       if (d.port != ep.port) return false;
-      return d.host == hName || d.host == hIp || d.pendingKey == 'pending:$hName:${ep.port}';
+      return d.host == hName ||
+          d.host == hIp ||
+          d.pendingKey == 'pending:$hName:${ep.port}';
     });
   }
 
@@ -250,7 +283,9 @@ class DeviceManager extends ChangeNotifier {
   }
 
   void _dedupeRealDevicesByMac() {
-    final pending = _devices.where((d) => d.mac.startsWith('pending:')).toList();
+    final pending = _devices
+        .where((d) => d.mac.startsWith('pending:'))
+        .toList();
     final reals = _devices.where((d) => !d.mac.startsWith('pending:')).toList();
     final best = <String, EspDevice>{};
     for (final d in reals) {
@@ -282,7 +317,11 @@ class DeviceManager extends ChangeNotifier {
     if (_isEndpointIgnored(ep)) return;
     final host = ep.ipv4?.address ?? ep.host;
     final key = 'pending:${ep.host}:${ep.port}';
-    final idx = _devices.indexWhere((d) => d.pendingKey == key || (d.mac.startsWith('pending:') && d.host == host && d.port == ep.port));
+    final idx = _devices.indexWhere(
+      (d) =>
+          d.pendingKey == key ||
+          (d.mac.startsWith('pending:') && d.host == host && d.port == ep.port),
+    );
     final dev = EspDevice(
       mac: 'pending:${ep.host}:${ep.port}',
       displayName: 'RetroWave',
@@ -300,7 +339,9 @@ class DeviceManager extends ChangeNotifier {
   }
 
   void _removePendingForHost(String host, int port) {
-    _devices.removeWhere((d) => d.mac.startsWith('pending:') && d.host == host && d.port == port);
+    _devices.removeWhere(
+      (d) => d.mac.startsWith('pending:') && d.host == host && d.port == port,
+    );
   }
 
   String? _labelFromUrl(String? url) {
@@ -347,11 +388,21 @@ class DeviceManager extends ChangeNotifier {
         final playing = s['playing'] == true;
         final name = (s['name'] ?? d.displayName).toString();
         final chip = s.containsKey('chip') ? s['chip']?.toString() : d.chip;
-        final a2dpCap = s['a2dp_sink_capable'] is bool ? s['a2dp_sink_capable'] as bool : d.a2dpSinkCapable;
-        final a2dpStarted = s.containsKey('a2dp_sink_started') ? s['a2dp_sink_started'] == true : d.a2dpSinkStarted;
-        final a2dpConn = s.containsKey('a2dp_connected') ? s['a2dp_connected'] == true : d.a2dpConnected;
-        final a2dpName = s.containsKey('a2dp_pairing_name') ? s['a2dp_pairing_name']?.toString() : d.a2dpPairingName;
-        final boardPf = s.containsKey('board_profile') ? s['board_profile']?.toString() : d.boardProfile;
+        final a2dpCap = s['a2dp_sink_capable'] is bool
+            ? s['a2dp_sink_capable'] as bool
+            : d.a2dpSinkCapable;
+        final a2dpStarted = s.containsKey('a2dp_sink_started')
+            ? s['a2dp_sink_started'] == true
+            : d.a2dpSinkStarted;
+        final a2dpConn = s.containsKey('a2dp_connected')
+            ? s['a2dp_connected'] == true
+            : d.a2dpConnected;
+        final a2dpName = s.containsKey('a2dp_pairing_name')
+            ? s['a2dp_pairing_name']?.toString()
+            : d.a2dpPairingName;
+        final boardPf = s.containsKey('board_profile')
+            ? s['board_profile']?.toString()
+            : d.boardProfile;
         final now = DateTime.now().millisecondsSinceEpoch;
         _devices[i] = d.copyWith(
           isOnline: true,
@@ -367,10 +418,18 @@ class DeviceManager extends ChangeNotifier {
           a2dpConnected: a2dpConn,
           a2dpPairingName: a2dpName,
           boardProfile: boardPf,
-          streamStation: s.containsKey('stream_station') ? s['stream_station']?.toString() : d.streamStation,
-          streamTitle: s.containsKey('stream_title') ? s['stream_title']?.toString() : d.streamTitle,
-          streamIcyUrl: s.containsKey('stream_icy_url') ? s['stream_icy_url']?.toString() : d.streamIcyUrl,
-          streamIcyDescription: s.containsKey('stream_icy_description') ? s['stream_icy_description']?.toString() : d.streamIcyDescription,
+          streamStation: s.containsKey('stream_station')
+              ? s['stream_station']?.toString()
+              : d.streamStation,
+          streamTitle: s.containsKey('stream_title')
+              ? s['stream_title']?.toString()
+              : d.streamTitle,
+          streamIcyUrl: s.containsKey('stream_icy_url')
+              ? s['stream_icy_url']?.toString()
+              : d.streamIcyUrl,
+          streamIcyDescription: s.containsKey('stream_icy_description')
+              ? s['stream_icy_description']?.toString()
+              : d.streamIcyDescription,
           lastSeenMs: now,
         );
         changed = true;
@@ -391,7 +450,9 @@ class DeviceManager extends ChangeNotifier {
 
   void _purgeStalePending() {
     final now = DateTime.now().millisecondsSinceEpoch;
-    _devices.removeWhere((d) => d.mac.startsWith('pending:') && (now - d.lastSeenMs) > 35000);
+    _devices.removeWhere(
+      (d) => d.mac.startsWith('pending:') && (now - d.lastSeenMs) > 35000,
+    );
   }
 
   void markNowPlaying({
@@ -404,10 +465,7 @@ class DeviceManager extends ChangeNotifier {
     for (var i = 0; i < _devices.length; i++) {
       final d = _devices[i];
       if (d.currentUrl == null || d.currentUrl!.trim() != urlTrim) continue;
-      _devices[i] = d.copyWith(
-        stationLabel: name,
-        stationLogoUrl: logoUrl,
-      );
+      _devices[i] = d.copyWith(stationLabel: name, stationLogoUrl: logoUrl);
     }
     notifyListeners();
   }
@@ -430,7 +488,9 @@ class DeviceManager extends ChangeNotifier {
 
   void _syncDeviceSelectedFlags() {
     for (var i = 0; i < _devices.length; i++) {
-      _devices[i] = _devices[i].copyWith(isSelected: selectedMacs.contains(_devices[i].mac));
+      _devices[i] = _devices[i].copyWith(
+        isSelected: selectedMacs.contains(_devices[i].mac),
+      );
     }
   }
 
@@ -442,7 +502,8 @@ class DeviceManager extends ChangeNotifier {
       }
     } else {
       for (final d in _devices) {
-        if (d.isOnline && !d.mac.startsWith('pending:')) selectedMacs.add(d.mac);
+        if (d.isOnline && !d.mac.startsWith('pending:'))
+          selectedMacs.add(d.mac);
       }
     }
     _syncDeviceSelectedFlags();
@@ -464,9 +525,13 @@ class DeviceManager extends ChangeNotifier {
   }
 
   Future<void> playUrlOnTargets(String url, {String? label}) async {
-    final list = targetsResolved.where((d) => !d.mac.startsWith('pending:')).toList();
+    final list = targetsResolved
+        .where((d) => !d.mac.startsWith('pending:'))
+        .toList();
     if (list.isEmpty) return;
-    await Future.wait(list.map((d) => Esp32Controller(d.baseUrl).playStream(url)));
+    await Future.wait(
+      list.map((d) => Esp32Controller(d.baseUrl).playStream(url)),
+    );
     _pushRecent(name: label ?? url, url: url);
     await pollStatuses();
   }
@@ -475,8 +540,17 @@ class DeviceManager extends ChangeNotifier {
     final macs = selectedMacs.isNotEmpty ? selectedMacs : targetMacs;
     final list = macs.isEmpty
         ? targetsResolved
-        : _devices.where((d) => macs.contains(d.mac) && d.isOnline && !d.mac.startsWith('pending:')).toList();
-    await Future.wait(list.map((d) => Esp32Controller(d.baseUrl).playStream(url)));
+        : _devices
+              .where(
+                (d) =>
+                    macs.contains(d.mac) &&
+                    d.isOnline &&
+                    !d.mac.startsWith('pending:'),
+              )
+              .toList();
+    await Future.wait(
+      list.map((d) => Esp32Controller(d.baseUrl).playStream(url)),
+    );
     _pushRecent(name: label ?? url, url: url);
     await pollStatuses();
   }
@@ -484,27 +558,36 @@ class DeviceManager extends ChangeNotifier {
   void _pushRecent({required String name, required String url}) {
     recentStations.removeWhere((e) => e['url'] == url);
     recentStations.insert(0, {'name': name, 'url': url});
-    if (recentStations.length > 30) recentStations = recentStations.sublist(0, 30);
+    if (recentStations.length > 30)
+      recentStations = recentStations.sublist(0, 30);
     unawaited(_saveRecent());
     notifyListeners();
   }
 
   Future<void> stopTargets() async {
-    final list = targetsResolved.where((d) => !d.mac.startsWith('pending:')).toList();
+    final list = targetsResolved
+        .where((d) => !d.mac.startsWith('pending:'))
+        .toList();
     await Future.wait(list.map((d) => Esp32Controller(d.baseUrl).stop()));
     await pollStatuses();
   }
 
   Future<void> stopSelected() async {
-    final list = selectedDevices.where((d) => d.isOnline && !d.mac.startsWith('pending:')).toList();
+    final list = selectedDevices
+        .where((d) => d.isOnline && !d.mac.startsWith('pending:'))
+        .toList();
     await Future.wait(list.map((d) => Esp32Controller(d.baseUrl).stop()));
     await pollStatuses();
   }
 
   Future<void> broadcastSameRadio(String url, {String? label}) async {
-    final list = selectedDevices.where((d) => d.isOnline && !d.mac.startsWith('pending:')).toList();
+    final list = selectedDevices
+        .where((d) => d.isOnline && !d.mac.startsWith('pending:'))
+        .toList();
     if (list.isEmpty) return;
-    await Future.wait(list.map((d) => Esp32Controller(d.baseUrl).playStream(url)));
+    await Future.wait(
+      list.map((d) => Esp32Controller(d.baseUrl).playStream(url)),
+    );
     _pushRecent(name: label ?? url, url: url);
     await pollStatuses();
   }
@@ -515,27 +598,36 @@ class DeviceManager extends ChangeNotifier {
 
   /// Ritorna un riepilogo esiti toggle BT per UX più chiara.
   Future<Map<String, int>> broadcastBluetoothDetailed() async {
-    final list = selectedDevices.where((d) => d.isOnline && !d.mac.startsWith('pending:')).toList();
+    final selected = selectedDevices
+        .where((d) => d.isOnline && !d.mac.startsWith('pending:'))
+        .toList();
+    final list = selected.isNotEmpty
+        ? selected
+        : _devices
+              .where((d) => d.isOnline && !d.mac.startsWith('pending:'))
+              .toList();
     var turnedOn = 0;
     var turnedRadio = 0;
     var unsupported = 0;
     var failed = 0;
-    await Future.wait(list.map((d) async {
-      final resp = await Esp32Controller(d.baseUrl).toggleBluetoothRaw();
-      switch (resp) {
-        case 'BT_ON':
-          turnedOn++;
-          break;
-        case 'RADIO':
-          turnedRadio++;
-          break;
-        case 'BT_NOT_SUPPORTED':
-          unsupported++;
-          break;
-        default:
-          failed++;
-      }
-    }));
+    await Future.wait(
+      list.map((d) async {
+        final resp = await Esp32Controller(d.baseUrl).toggleBluetoothRaw();
+        switch (resp) {
+          case 'BT_ON':
+            turnedOn++;
+            break;
+          case 'RADIO':
+            turnedRadio++;
+            break;
+          case 'BT_NOT_SUPPORTED':
+            unsupported++;
+            break;
+          default:
+            failed++;
+        }
+      }),
+    );
     await pollStatuses();
     return {
       'bt_on': turnedOn,
@@ -546,8 +638,47 @@ class DeviceManager extends ChangeNotifier {
     };
   }
 
+  /// Forza BT ON (non toggle): evita di spegnere per errore un device già in BT.
+  Future<Map<String, int>> ensureBluetoothOnDetailed() async {
+    final selected = selectedDevices
+        .where((d) => d.isOnline && !d.mac.startsWith('pending:'))
+        .toList();
+    final list = selected.isNotEmpty
+        ? selected
+        : _devices
+              .where((d) => d.isOnline && !d.mac.startsWith('pending:'))
+              .toList();
+    var turnedOn = 0;
+    var unsupported = 0;
+    var failed = 0;
+    await Future.wait(
+      list.map((d) async {
+        final resp = await Esp32Controller(d.baseUrl).bluetoothOnRaw();
+        switch (resp) {
+          case 'BT_ON':
+            turnedOn++;
+            break;
+          case 'BT_NOT_SUPPORTED':
+            unsupported++;
+            break;
+          default:
+            failed++;
+        }
+      }),
+    );
+    await pollStatuses();
+    return {
+      'bt_on': turnedOn,
+      'unsupported': unsupported,
+      'failed': failed,
+      'total': list.length,
+    };
+  }
+
   Future<void> syncVolumeSelected() async {
-    final list = selectedDevices.where((d) => d.isOnline && !d.mac.startsWith('pending:')).toList();
+    final list = selectedDevices
+        .where((d) => d.isOnline && !d.mac.startsWith('pending:'))
+        .toList();
     if (list.isEmpty) return;
     final v = list.first.volume;
     await Future.wait(list.map((d) => Esp32Controller(d.baseUrl).setVolume(v)));
@@ -597,7 +728,9 @@ class DeviceManager extends ChangeNotifier {
     if (_ignoredEndpoints.length != ignoredBefore) {
       await _saveIgnored();
     }
-    final base = port == 80 ? 'http://$resolvedHost' : 'http://$resolvedHost:$port';
+    final base = port == 80
+        ? 'http://$resolvedHost'
+        : 'http://$resolvedHost:$port';
     final ctrl = Esp32Controller(base);
     final status = await ctrl.getStatus();
     if (status == null) return false;
@@ -608,7 +741,11 @@ class DeviceManager extends ChangeNotifier {
       await _saveIgnored();
     }
     await _mergeFromEndpoint(
-      MdnsEndpoint(host: resolvedHost, port: port, ipv4: InternetAddress.tryParse(resolvedHost)),
+      MdnsEndpoint(
+        host: resolvedHost,
+        port: port,
+        ipv4: InternetAddress.tryParse(resolvedHost),
+      ),
     );
     return true;
   }
@@ -634,9 +771,15 @@ class DeviceManager extends ChangeNotifier {
     } else {
       final n = normMac(mac);
       _ignoredMacs.add(n);
-      _devices.removeWhere((d) => !d.mac.startsWith('pending:') && normMac(d.mac) == n);
-      selectedMacs.removeWhere((m) => !m.startsWith('pending:') && normMac(m) == n);
-      targetMacs.removeWhere((m) => !m.startsWith('pending:') && normMac(m) == n);
+      _devices.removeWhere(
+        (d) => !d.mac.startsWith('pending:') && normMac(d.mac) == n,
+      );
+      selectedMacs.removeWhere(
+        (m) => !m.startsWith('pending:') && normMac(m) == n,
+      );
+      targetMacs.removeWhere(
+        (m) => !m.startsWith('pending:') && normMac(m) == n,
+      );
     }
     groups = groups
         .map(

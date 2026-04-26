@@ -7,6 +7,10 @@ extern "C" {
 /// True solo su ESP32 con Bluetooth Classic (non ESP32-S3 / -C3).
 bool retroA2dpSupportsHardware(void);
 
+/// Inizializza il controller BT (Classic-only) PRIMA che WiFi si connetta.
+/// Deve essere chiamato dopo WiFi.mode() ma prima di wm.autoConnect().
+bool retroA2dpPreInitController(void);
+
 bool retroA2dpIsSinkRunning(void);
 bool retroA2dpIsConnected(void);
 

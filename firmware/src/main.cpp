@@ -17,7 +17,7 @@
 
 // --- I2S verso GY-PCM5102 ---
 // S3 (default): pinheader YD — GPIO 16, 17, 18.
-// ESP32-WROOM-32U / DevKit: override da platformio.ini (default 16/5/17 per PCM5102: BCK/LRCK/DIN).
+// ESP32-WROOM-32U / DevKit: override da platformio.ini (default 26/25/22 per PCM5102: BCK/LRCK/DIN).
 #ifndef I2S_BCLK
 #define I2S_BCLK 17
 #endif
@@ -33,7 +33,7 @@ static const char kDefaultStreamUrl[] = "http://ice1.somafm.com/groovesalad-128-
 
 WebServer server(80);
 Preferences prefs;
-Audio audio;
+Audio* audio = nullptr;
 
 String deviceName;
 String lastUrl;
@@ -44,6 +44,9 @@ String streamStation;
 String streamTitle;
 String streamIcyUrl;
 String streamIcyDescription;
+enum class BtSwitchOp : uint8_t { None = 0, ToBluetooth, ToRadio };
+volatile BtSwitchOp btSwitchRequested = BtSwitchOp::None;
+volatile bool btSwitchBusy = false;
 
 String macSuffix() {
   uint8_t m[6];
@@ -150,9 +153,27 @@ static void startRadioStream(const char* url) {
   streamIcyUrl = "";
   streamIcyDescription = "";
   Serial.printf("Audio: avvio stream %s\n", url);
-  audio.stopSong();
+  if (audio == nullptr) {
+    audio = new Audio();
+  }
+  audio->stopSong();
   delay(150);
-  audio.connecttohost(url);
+  audio->connecttohost(url);
+}
+
+static String normalizeStreamUrl(const String& raw) {
+  String s = raw;
+  s.trim();
+  if (s.isEmpty()) return s;
+  if (s.startsWith("//")) {
+    return String("http:") + s;
+  }
+  const bool hasHttp = s.startsWith("http://") || s.startsWith("https://");
+  if (!hasHttp) {
+    // Molte API restituiscono host senza schema: prova HTTP esplicito.
+    return String("http://") + s;
+  }
+  return s;
 }
 
 void handleStatus() {
@@ -186,6 +207,7 @@ void handleStatus() {
 // Diagnostica: WiFi, pin I2S attesi, stato decoder/buffer (non sostituisce il multimetro sul DAC).
 void handleDiag() {
   JsonDocument doc;
+  const bool audioReady = (audio != nullptr);
 
   doc["serial"]["baud"] = 115200;
   doc["serial"]["hint"] =
@@ -207,19 +229,19 @@ void handleDiag() {
   i2s["lrck_ws_gpio"] = I2S_LRC;
   i2s["dout_from_esp_gpio"] = I2S_DOUT;
   i2s["dac_module"] = "GY-PCM5102: BCK<-BCLK, LCK<-LRCK, DIN<-DOUT_ESP, SCK->GND, VIN<-3V3, GND comune";
-  i2s["i2s_port"] = audio.getI2sPort();
+  i2s["i2s_port"] = audioReady ? audio->getI2sPort() : -1;
 
   JsonObject au = doc["audio_engine"].to<JsonObject>();
-  au["running"] = audio.isRunning();
-  au["volume_0_21"] = audio.getVolume();
+  au["running"] = audioReady ? audio->isRunning() : false;
+  au["volume_0_21"] = audioReady ? audio->getVolume() : 0;
   au["psram_size_kb"] = ESP.getPsramSize() / 1024;
-  au["codec"] = audio.getCodecname();
-  au["sample_rate_hz"] = audio.getSampleRate();
-  au["bits_per_sample"] = audio.getBitsPerSample();
-  au["channels"] = audio.getChannels();
-  au["bitrate_bps"] = audio.getBitRate(true);
-  au["in_buffer_filled"] = audio.inBufferFilled();
-  au["in_buffer_free"] = audio.inBufferFree();
+  au["codec"] = audioReady ? audio->getCodecname() : "N/A";
+  au["sample_rate_hz"] = audioReady ? audio->getSampleRate() : 0;
+  au["bits_per_sample"] = audioReady ? audio->getBitsPerSample() : 0;
+  au["channels"] = audioReady ? audio->getChannels() : 0;
+  au["bitrate_bps"] = audioReady ? audio->getBitRate(true) : 0;
+  au["in_buffer_filled"] = audioReady ? audio->inBufferFilled() : 0;
+  au["in_buffer_free"] = audioReady ? audio->inBufferFree() : 0;
 
   JsonObject st = doc["app_state"].to<JsonObject>();
   st["playing_flag"] = playing;
@@ -312,7 +334,7 @@ button,.btn{display:inline-block;padding:10px 16px;margin:6px 6px 0 0;border-rad
 <p><a href="/volume?v=18">18</a> · <a href="/volume?v=21">max 21</a></p>
 </div>
 <div class="box">
-<p><strong>I2S nel firmware</strong>: i GPIO attivi sono in <a href="/diag"><code>/diag</code></a> sotto <code>i2s_expected</code> (campi <code>bclk_gpio</code>, <code>lrck_ws_gpio</code>, <code>dout_from_esp_gpio</code>). Su ESP32-WROOM-32U in questo progetto BCLK/LRCK/DOUT = 16/5/17; su ESP32-S3 spesso 17/16/18. Se <code>/diag</code> mostra stream attivo e sample rate ma non senti nulla: DAC, <code>SCK→GND</code>, jack AUX.</p>
+<p><strong>I2S nel firmware</strong>: i GPIO attivi sono in <a href="/diag"><code>/diag</code></a> sotto <code>i2s_expected</code> (campi <code>bclk_gpio</code>, <code>lrck_ws_gpio</code>, <code>dout_from_esp_gpio</code>). Su ESP32-WROOM-32U in questo progetto BCLK/LRCK/DOUT = 26/25/22; su ESP32-S3 spesso 17/16/18. Se <code>/diag</code> mostra stream attivo e sample rate ma non senti nulla: DAC, <code>SCK→GND</code>, jack AUX.</p>
 </div>
 </body></html>
 )CONSOLE";
@@ -325,7 +347,11 @@ void handleStream() {
     return;
   }
   retroA2dpLeaveBluetooth();
-  lastUrl = server.arg("url");
+  lastUrl = normalizeStreamUrl(server.arg("url"));
+  if (lastUrl.length() == 0) {
+    server.send(400, "text/plain", "INVALID_URL");
+    return;
+  }
   playing = true;
   mode = "radio";
   saveState();
@@ -333,10 +359,85 @@ void handleStream() {
   server.send(200, "text/plain", "OK");
 }
 
+static void enterBluetoothMode() {
+  if (mode == "bluetooth") return;
+  if (!retroA2dpSupportsHardware()) return;
+  Serial.println(F("BT: switch radio -> bluetooth (start sink)"));
+  if (audio != nullptr) {
+    audio->stopSong();
+  }
+  playing = false;
+  mode = "bluetooth";
+  saveState();
+  delay(150);
+  retroA2dpEnterBluetooth(deviceName.c_str(), volumeLevel);
+  Serial.println(F("BT: sink start richiesto"));
+}
+
+static void leaveBluetoothMode() {
+  if (mode != "bluetooth") return;
+  Serial.println(F("BT: switch bluetooth -> radio"));
+  retroA2dpLeaveBluetooth();
+  delay(150);
+  mode = "radio";
+  if (lastUrl.length() > 0) {
+    playing = true;
+    startRadioStream(lastUrl.c_str());
+  } else {
+    playing = false;
+    mode = "idle";
+  }
+  saveState();
+}
+
+static void btSwitchTask(void* /*param*/) {
+  const BtSwitchOp op = btSwitchRequested;
+  btSwitchRequested = BtSwitchOp::None;
+  btSwitchBusy = true;
+  if (op == BtSwitchOp::ToBluetooth) {
+    enterBluetoothMode();
+  } else if (op == BtSwitchOp::ToRadio) {
+    leaveBluetoothMode();
+  }
+  btSwitchBusy = false;
+  vTaskDelete(nullptr);
+}
+
+static bool scheduleBtSwitch(BtSwitchOp op) {
+  if (!retroA2dpSupportsHardware()) return false;
+  if (btSwitchBusy) return false;
+  btSwitchRequested = op;
+  BaseType_t ok = xTaskCreatePinnedToCore(
+      btSwitchTask,
+      "bt-switch",
+      6144,
+      nullptr,
+      1,
+      nullptr,
+      0);
+  if (ok != pdPASS) {
+    btSwitchRequested = BtSwitchOp::None;
+    Serial.println(F("BT: errore creazione task switch"));
+    return false;
+  }
+  return true;
+}
+
+static void restartToMode(const char* nextMode, const char* response) {
+  mode = String(nextMode);
+  saveState();
+  server.send(200, "text/plain", response);
+  server.client().stop();
+  delay(180);
+  ESP.restart();
+}
+
 void handleStop() {
   playing = false;
   mode = "idle";
-  audio.stopSong();
+  if (audio != nullptr) {
+    audio->stopSong();
+  }
   retroA2dpLeaveBluetooth();
   saveState();
   server.send(200, "text/plain", "STOPPED");
@@ -349,39 +450,47 @@ void handleVolume() {
   }
   volumeLevel = constrain(server.arg("v").toInt(), 0, 21);
   saveState();
-  audio.setVolume(static_cast<uint8_t>(volumeLevel));
+  if (audio != nullptr) {
+    audio->setVolume(static_cast<uint8_t>(volumeLevel));
+  }
   retroA2dpSetVolume(volumeLevel);
   server.send(200, "text/plain", "OK");
 }
 
 void handleBluetooth() {
-  if (mode == "bluetooth") {
-    retroA2dpLeaveBluetooth();
-    delay(150);
-    mode = "radio";
-    if (lastUrl.length() > 0) {
-      playing = true;
-      startRadioStream(lastUrl.c_str());
-    } else {
-      playing = false;
-      mode = "idle";
-    }
-    saveState();
-    server.send(200, "text/plain", "RADIO");
-    return;
-  }
-  // Passaggio a modalità bluetooth: richiede stack Classic (non disponibile su ESP32-S3).
   if (!retroA2dpSupportsHardware()) {
     server.send(200, "text/plain", "BT_NOT_SUPPORTED");
     return;
   }
-  audio.stopSong();
-  playing = false;
-  mode = "bluetooth";
-  delay(150);
-  retroA2dpEnterBluetooth(deviceName.c_str(), volumeLevel);
-  saveState();
-  server.send(200, "text/plain", "BT_ON");
+  if (mode == "bluetooth") {
+    restartToMode("radio", "RADIO_RESTARTING");
+  } else {
+    restartToMode("bluetooth", "BT_ON_RESTARTING");
+  }
+}
+
+void handleBluetoothOn() {
+  if (!retroA2dpSupportsHardware()) {
+    server.send(200, "text/plain", "BT_NOT_SUPPORTED");
+    return;
+  }
+  if (mode == "bluetooth") {
+    server.send(200, "text/plain", "BT_ON");
+    return;
+  }
+  restartToMode("bluetooth", "BT_ON_RESTARTING");
+}
+
+void handleBluetoothOff() {
+  if (!retroA2dpSupportsHardware()) {
+    server.send(200, "text/plain", "BT_NOT_SUPPORTED");
+    return;
+  }
+  if (mode != "bluetooth") {
+    server.send(200, "text/plain", "RADIO");
+    return;
+  }
+  restartToMode("radio", "RADIO_RESTARTING");
 }
 
 void handleRename() {
@@ -406,7 +515,9 @@ void handleRename() {
 // Cancella credenziali WiFi e riavvia → l'ESP torna in AP RetroWave-XXXX-Setup (solo rete locale).
 void handleWifiReset() {
   Serial.println(F("HTTP /wifi_reset: cancello WiFi e riavvio tra breve"));
-  audio.stopSong();
+  if (audio != nullptr) {
+    audio->stopSong();
+  }
   retroA2dpLeaveBluetooth();
   server.send(200, "application/json", "{\"ok\":true,\"next\":\"ap_setup\"}");
   server.client().stop();
@@ -426,10 +537,21 @@ void setup() {
   Serial.flush();
   delay(300);
   loadState();
+  const bool bootBluetooth = (mode == "bluetooth" && retroA2dpSupportsHardware());
 
   // Hotspot di configurazione se non ci sono credenziali o la rete non è raggiungibile.
   // Nome rete visibile dal telefono: RetroWave-XXXX-Setup (XXXX = ultimi byte MAC).
   WiFi.mode(WIFI_STA);
+
+  // Il controller BT va abilitato DOPO WiFi.mode() (che fa coex_init) ma
+  // PRIMA che WiFi si connetta, altrimenti coex_core_enable chiama abort().
+  if (bootBluetooth) {
+    Serial.println(F("A2DP: pre-init controller BT (prima della connessione WiFi)..."));
+    if (!retroA2dpPreInitController()) {
+      Serial.println(F("A2DP: pre-init fallito — fallback a modo radio"));
+      mode = "radio";
+    }
+  }
 
   WiFiManager wm;
   // Tieni premuto BOOT (GPIO0) all’accensione per cancellare il WiFi salvato e forzare di nuovo il portale.
@@ -453,7 +575,8 @@ void setup() {
   wm.setConfigPortalTimeout(0); // 0 = nessun timeout (portale resta attivo)
   wm.setWiFiAutoReconnect(true);
 
-  WiFi.setSleep(false);
+  // WiFi+BT coesistenza richiede modem sleep abilitato; in solo-radio lo disabilitiamo per reattività.
+  WiFi.setSleep(bootBluetooth);
   WiFi.persistent(true);
 
   const String apName = String("RetroWave-") + macSuffix() + "-Setup";
@@ -473,9 +596,17 @@ void setup() {
   Serial.print("WiFi: connesso, IP LAN: ");
   Serial.println(WiFi.localIP());
 
-  audio.setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);
-  audio.setVolume(static_cast<uint8_t>(volumeLevel));
-  Serial.printf("I2S: BCLK=%d LRC=%d DOUT=%d (verifica cablaggio DAC)\n", I2S_BCLK, I2S_LRC, I2S_DOUT);
+  if (!bootBluetooth) {
+    if (audio == nullptr) {
+      audio = new Audio();
+    }
+    audio->setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);
+    audio->setConnectionTimeout(4000, 15000);
+    audio->setVolume(static_cast<uint8_t>(volumeLevel));
+    Serial.printf("I2S: BCLK=%d LRC=%d DOUT=%d (verifica cablaggio DAC)\n", I2S_BCLK, I2S_LRC, I2S_DOUT);
+  } else {
+    Serial.printf("I2S radio sospeso (boot in BT mode). Pin previsti DAC: BCLK=%d LRC=%d DOUT=%d\n", I2S_BCLK, I2S_LRC, I2S_DOUT);
+  }
   if (retroA2dpSupportsHardware()) {
     Serial.println(F("A2DP: hardware supportato — in mode bluetooth il telefono puo' accoppiarsi come altoparlante."));
   } else {
@@ -493,6 +624,8 @@ void setup() {
   server.on("/stop", HTTP_GET, handleStop);
   server.on("/volume", HTTP_GET, handleVolume);
   server.on("/bluetooth", HTTP_GET, handleBluetooth);
+  server.on("/bluetooth_on", HTTP_GET, handleBluetoothOn);
+  server.on("/bluetooth_off", HTTP_GET, handleBluetoothOff);
   server.on("/rename", HTTP_POST, handleRename);
   server.on("/wifi_reset", HTTP_GET, handleWifiReset);
   server.on("/wifi_reset", HTTP_POST, handleWifiReset);
@@ -504,7 +637,7 @@ void setup() {
   }
 
   if (WiFi.status() == WL_CONNECTED) {
-    if (mode == "bluetooth" && retroA2dpSupportsHardware()) {
+    if (bootBluetooth) {
       playing = false;
       retroA2dpEnterBluetooth(deviceName.c_str(), volumeLevel);
     } else if (lastUrl.length() > 0) {
@@ -516,6 +649,8 @@ void setup() {
 }
 
 void loop() {
-  audio.loop();
+  if (mode != "bluetooth" && audio != nullptr) {
+    audio->loop();
+  }
   server.handleClient();
 }

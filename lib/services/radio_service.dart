@@ -14,7 +14,7 @@ class RadioService {
     if (list is! List) return [];
     final parsed = list
         .map((e) => RadioStation.fromJson(Map<String, dynamic>.from(e as Map)))
-        .where((s) => s.url.trim().isNotEmpty)
+        .where((s) => s.playableUrl.isNotEmpty)
         .toList();
     final byUuid = <String, RadioStation>{};
     for (final s in parsed) {
@@ -33,24 +33,27 @@ class RadioService {
     return out;
   }
 
-  Future<List<RadioStation>> searchByName(String query, {int limit = 40}) async {
+  Future<List<RadioStation>> searchByName(
+    String query, {
+    int limit = 40,
+  }) async {
     if (query.trim().isEmpty) return [];
-    final uri = Uri.parse('$_base/stations/search').replace(queryParameters: {
-      'name': query.trim(),
-      'limit': '$limit',
-      'hidebroken': 'true',
-    });
+    final uri = Uri.parse('$_base/stations/search').replace(
+      queryParameters: {
+        'name': query.trim(),
+        'limit': '$limit',
+        'hidebroken': 'true',
+      },
+    );
     final r = await http.get(uri, headers: _ua);
     if (r.statusCode != 200) return [];
     return _parseList(r.body);
   }
 
   Future<List<RadioStation>> searchByTag(String tag, {int limit = 40}) async {
-    final uri = Uri.parse('$_base/stations/search').replace(queryParameters: {
-      'tag': tag,
-      'limit': '$limit',
-      'hidebroken': 'true',
-    });
+    final uri = Uri.parse('$_base/stations/search').replace(
+      queryParameters: {'tag': tag, 'limit': '$limit', 'hidebroken': 'true'},
+    );
     final r = await http.get(uri, headers: _ua);
     if (r.statusCode != 200) return [];
     return _parseList(r.body);
@@ -65,13 +68,15 @@ class RadioService {
   }
 
   /// Ricerca per paese (codice ISO, es. IT).
-  Future<List<RadioStation>> searchByCountry(String countryCode, {int limit = 50}) async {
+  Future<List<RadioStation>> searchByCountry(
+    String countryCode, {
+    int limit = 50,
+  }) async {
     final cc = countryCode.trim().toLowerCase();
     if (cc.length != 2) return [];
-    final uri = Uri.parse('$_base/stations/bycountrycodeexact/$cc').replace(queryParameters: {
-      'limit': '$limit',
-      'hidebroken': 'true',
-    });
+    final uri = Uri.parse(
+      '$_base/stations/bycountrycodeexact/$cc',
+    ).replace(queryParameters: {'limit': '$limit', 'hidebroken': 'true'});
     final r = await http.get(uri, headers: _ua);
     if (r.statusCode != 200) return [];
     return _parseList(r.body);

@@ -10,9 +10,9 @@ Documento di riferimento per **ESP32-S3** e **ESP32-WROOM-32U** (DevKit + antenn
 
 | Segnale I2S | GPIO (default `platformio.ini`) | Pin sul PCM5102 |
 |-------------|-----------------------------------|-----------------|
-| **BCLK**    | **GPIO 16**                       | **BCK**         |
-| **LRCK/WS** | **GPIO 5**                        | **LCK**         |
-| **DOUT**    | **GPIO 17**                       | **DIN**         |
+| **BCLK**    | **GPIO 26**                       | **BCK**         |
+| **LRCK/WS** | **GPIO 25**                       | **LCK**         |
+| **DOUT**    | **GPIO 22**                       | **DIN**         |
 
 Verifica sempre i valori effettivi in **`GET /diag`** → `i2s_expected` dopo ogni build. Se cambi GPIO, aggiorna `build_flags` (`-DI2S_BCLK=…` ecc.) in `firmware/platformio.ini`.
 

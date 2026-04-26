@@ -16,7 +16,8 @@ class SearchScreen extends StatefulWidget {
   State<SearchScreen> createState() => _SearchScreenState();
 }
 
-class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderStateMixin {
+class _SearchScreenState extends State<SearchScreen>
+    with SingleTickerProviderStateMixin {
   final _q = TextEditingController();
   final _radio = RadioService();
   final _focus = FocusNode();
@@ -31,7 +32,15 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
   late TabController _tabController;
   int _reqCounter = 0;
 
-  static const _tags = ['Tutti', 'Pop', 'Jazz', 'Rock', 'News', 'Classic', 'Electronic'];
+  static const _tags = [
+    'Tutti',
+    'Pop',
+    'Jazz',
+    'Rock',
+    'News',
+    'Classic',
+    'Electronic',
+  ];
   static const _sortModes = ['Rilevanza', 'Bitrate', 'Nome'];
 
   List<RadioStation> get _display {
@@ -178,8 +187,17 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
                       child: Text.rich(
                         TextSpan(
                           children: [
-                            TextSpan(text: 'Radio ', style: AppTheme.displayTitle(size: 26)),
-                            TextSpan(text: 'world', style: AppTheme.displayTitle(size: 26, accent: AppColors.acc)),
+                            TextSpan(
+                              text: 'Radio ',
+                              style: AppTheme.displayTitle(size: 26),
+                            ),
+                            TextSpan(
+                              text: 'world',
+                              style: AppTheme.displayTitle(
+                                size: 26,
+                                accent: AppColors.acc,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -219,10 +237,16 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
                   child: TextField(
                     controller: _q,
                     focusNode: _focus,
-                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                    ),
                     decoration: InputDecoration(
                       hintText: 'Nome stazione, genere, città…',
-                      prefixIcon: const Icon(Icons.search_rounded, color: AppColors.muted),
+                      prefixIcon: const Icon(
+                        Icons.search_rounded,
+                        color: AppColors.muted,
+                      ),
                       suffixIcon: _q.text.isNotEmpty
                           ? IconButton(
                               icon: const Icon(Icons.clear_rounded),
@@ -245,7 +269,10 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(18),
-                        borderSide: const BorderSide(color: AppColors.acc, width: 1.5),
+                        borderSide: const BorderSide(
+                          color: AppColors.acc,
+                          width: 1.5,
+                        ),
                       ),
                     ),
                     onChanged: (_) {
@@ -311,7 +338,11 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
               ),
               const SizedBox(height: 8),
               _targetChips(dm),
-              if (_loading) const LinearProgressIndicator(minHeight: 2, color: AppColors.acc),
+              if (_loading)
+                const LinearProgressIndicator(
+                  minHeight: 2,
+                  color: AppColors.acc,
+                ),
               if (_error != null)
                 Padding(
                   padding: const EdgeInsets.all(16),
@@ -325,16 +356,23 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.radio_rounded, size: 56, color: AppColors.muted.withValues(alpha: 0.4)),
+                              Icon(
+                                Icons.radio_rounded,
+                                size: 56,
+                                color: AppColors.muted.withValues(alpha: 0.4),
+                              ),
                               const SizedBox(height: 16),
                               Text(
                                 _tabController.index == 0
                                     ? 'Cerca migliaia di stazioni\n(radio-browser.info)'
                                     : _tabController.index == 1
-                                        ? 'Caricamento classifica… tocca Popolari'
-                                        : 'Caricamento radio italiane…',
+                                    ? 'Caricamento classifica… tocca Popolari'
+                                    : 'Caricamento radio italiane…',
                                 textAlign: TextAlign.center,
-                                style: TextStyle(color: AppColors.muted2, height: 1.5),
+                                style: TextStyle(
+                                  color: AppColors.muted2,
+                                  height: 1.5,
+                                ),
                               ),
                             ],
                           ),
@@ -343,7 +381,8 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
                     : ListView.builder(
                         padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                         itemCount: _display.length,
-                        itemBuilder: (context, i) => _stationTile(context, dm, _display[i]),
+                        itemBuilder: (context, i) =>
+                            _stationTile(context, dm, _display[i]),
                       ),
               ),
             ],
@@ -362,12 +401,18 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
         children: [
           Text('A:', style: AppTheme.mono(11, color: AppColors.muted)),
           const SizedBox(width: 8),
-          ...dm.devices.where((d) => !d.mac.startsWith('pending:')).map(
+          ...dm.devices
+              .where((d) => !d.mac.startsWith('pending:'))
+              .map(
                 (d) => Padding(
                   padding: const EdgeInsets.only(right: 6),
                   child: FilterChip(
-                    label: Text(d.displayName, style: const TextStyle(fontSize: 12)),
-                    selected: dm.targetMacs.isEmpty || dm.targetMacs.contains(d.mac),
+                    label: Text(
+                      d.displayName,
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    selected:
+                        dm.targetMacs.isEmpty || dm.targetMacs.contains(d.mac),
                     onSelected: (_) => dm.toggleTarget(d.mac),
                     visualDensity: VisualDensity.compact,
                   ),
@@ -384,7 +429,8 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
   }
 
   Widget _stationTile(BuildContext context, DeviceManager dm, RadioStation s) {
-    final https = s.url.toLowerCase().startsWith('https:');
+    final streamUrl = s.playableUrl;
+    final https = streamUrl.toLowerCase().startsWith('https:');
     final subtitle = <String>[
       if ((s.country ?? '').trim().isNotEmpty) s.country!.trim(),
       if ((s.language ?? '').trim().isNotEmpty) s.language!.trim(),
@@ -398,8 +444,8 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
         borderRadius: BorderRadius.circular(20),
         child: InkWell(
           onTap: () {
-            dm.markNowPlaying(url: s.url, name: s.name, logoUrl: s.favicon);
-            dm.playUrlOnTargets(s.url, label: s.name);
+            dm.markNowPlaying(url: streamUrl, name: s.name, logoUrl: s.favicon);
+            dm.playUrlOnTargets(streamUrl, label: s.name);
           },
           borderRadius: BorderRadius.circular(20),
           child: Container(
@@ -421,16 +467,25 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
                             fit: BoxFit.cover,
                             placeholder: (ctx, url) => ColoredBox(
                               color: AppColors.s2,
-                              child: Icon(Icons.radio_rounded, color: AppColors.muted.withValues(alpha: 0.5)),
+                              child: Icon(
+                                Icons.radio_rounded,
+                                color: AppColors.muted.withValues(alpha: 0.5),
+                              ),
                             ),
                             errorWidget: (ctx, url, err) => ColoredBox(
                               color: AppColors.s2,
-                              child: const Icon(Icons.music_note_rounded, color: AppColors.acc),
+                              child: const Icon(
+                                Icons.music_note_rounded,
+                                color: AppColors.acc,
+                              ),
                             ),
                           )
                         : ColoredBox(
                             color: AppColors.s2,
-                            child: const Icon(Icons.music_note_rounded, color: AppColors.acc),
+                            child: const Icon(
+                              Icons.music_note_rounded,
+                              color: AppColors.acc,
+                            ),
                           ),
                   ),
                 ),
@@ -443,11 +498,16 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
                         s.name,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        subtitle.isEmpty ? 'Metadati non disponibili' : subtitle,
+                        subtitle.isEmpty
+                            ? 'Metadati non disponibili'
+                            : subtitle,
                         style: AppTheme.mono(11, color: AppColors.muted2),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -461,7 +521,7 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
                         Padding(
                           padding: const EdgeInsets.only(top: 4),
                           child: Text(
-                            'HTTPS: l’ESP la supporta se il firmware ha SSL attivo',
+                            'HTTPS: SSL/TLS attivo di default nel firmware',
                             style: AppTheme.mono(10, color: AppColors.cyan),
                           ),
                         ),
@@ -470,8 +530,12 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
                 ),
                 FilledButton.tonal(
                   onPressed: () {
-                    dm.markNowPlaying(url: s.url, name: s.name, logoUrl: s.favicon);
-                    dm.playUrlOnTargets(s.url, label: s.name);
+                    dm.markNowPlaying(
+                      url: streamUrl,
+                      name: s.name,
+                      logoUrl: s.favicon,
+                    );
+                    dm.playUrlOnTargets(streamUrl, label: s.name);
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text('Inviato: ${s.name}')),
                     );

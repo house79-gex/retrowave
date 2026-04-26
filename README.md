@@ -10,7 +10,7 @@ Dalla cartella `firmware/`:
 pio run -e esp32-wroom-32u -t upload
 ```
 
-Profilo predefinito (`default_envs`): **`esp32-wroom-32u`** (A2DP + WiFi + I2S verso PCM5102, pin di default **BCLK=16, LRCK=5, DOUT=17**). Alias: `esp32-wroom-a2dp`.
+Profilo predefinito (`default_envs`): **`esp32-wroom-32u`** (A2DP + WiFi + I2S verso PCM5102, pin di default **BCLK=26, LRCK=25, DOUT=22**). Alias: `esp32-wroom-a2dp`.
 
 Per **ESP32-S3** (senza A2DP):
 
